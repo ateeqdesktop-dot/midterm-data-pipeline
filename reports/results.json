@@ -3,29 +3,33 @@
   "batch_timings": [
     {
       "batch_number": 1,
-      "elapsed_seconds": 0.001883,
-      "rows": 2
+      "elapsed_seconds": 0.002038,
+      "rows": 2,
+      "throughput_rows_per_second": 981.421
     },
     {
       "batch_number": 2,
-      "elapsed_seconds": 0.001992,
-      "rows": 2
+      "elapsed_seconds": 0.002146,
+      "rows": 2,
+      "throughput_rows_per_second": 932.178
     },
     {
       "batch_number": 3,
-      "elapsed_seconds": 0.00214,
-      "rows": 2
+      "elapsed_seconds": 0.002428,
+      "rows": 2,
+      "throughput_rows_per_second": 823.666
     },
     {
       "batch_number": 4,
-      "elapsed_seconds": 0.001704,
-      "rows": 1
+      "elapsed_seconds": 0.001784,
+      "rows": 1,
+      "throughput_rows_per_second": 560.424
     }
   ],
   "batches": 4,
   "consistency_check": true,
   "corrected_count": 3,
-  "elapsed_seconds": 0.008837,
+  "elapsed_seconds": 0.009555,
   "engine_used": "python_batch",
   "error_case_counts": {
     "DUPLICATE_ORDER_ID": 1,
@@ -47,8 +51,8 @@
   "quarantine_count": 4,
   "raw_loaded": 7,
   "rows_read": 7,
-  "run_id": "56792c0e8e39",
-  "throughput": 792.156,
+  "run_id": "da3d2b6ccd24",
+  "throughput": 732.575,
   "unchanged_count": 3,
   "updated_count": 0,
   "valid_count": 0
