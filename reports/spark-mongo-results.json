@@ -1,0 +1,30 @@
+{
+  "batch_size": null,
+  "batch_timings": [],
+  "batches": 0,
+  "consistency_check": true,
+  "corrected_count": 3,
+  "elapsed_seconds": 2.647641,
+  "engine_used": "pyspark",
+  "error_case_counts": {
+    "DUPLICATE_ORDER_ID": 1,
+    "EMPTY_ITEMS": 1,
+    "MISSING_CUSTOMER_ID": 1,
+    "MULTIPLE_CONFLICTING_ERRORS": 1
+  },
+  "file_name": "sample_orders.csv",
+  "file_size_mb": 0.000714,
+  "inserted_count": 3,
+  "notes": [
+    "Distributed DataFrame quality transformation and MongoDB Spark Connector writes were used."
+  ],
+  "partitions": 2,
+  "quarantine_count": 4,
+  "raw_loaded": 7,
+  "rows_read": 7,
+  "run_id": "610dc4d32dc9",
+  "throughput": 2.644,
+  "unchanged_count": 0,
+  "updated_count": 0,
+  "valid_count": 0
+}

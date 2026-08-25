@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+*.pyc
+data/orders_huge_mixed_quality.csv
+data/orders_sample.csv
+data/generated_sample.csv
+reports/screenshots/*
+!reports/screenshots/.gitkeep
+.mongo-data/
+.mongo-logs/
+.ivy2/

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "midterm-data-pipeline"
+version = "1.0.0"
+description = "Hybrid Python Batch and PySpark MongoDB ELT pipeline for dirty orders"
+requires-python = ">=3.10"
+dependencies = ["pymongo>=4.6,<5", "pyspark>=4.0,<4.1", "pandas>=2.2,<3"]
+
+[project.scripts]
+midterm-pipeline = "main:main"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

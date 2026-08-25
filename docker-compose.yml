@@ -1,0 +1,28 @@
+services:
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' localhost:27017/test | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  pipeline:
+    build: .
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DATABASE: midterm_orders
+    volumes:
+      - ./data:/app/data:ro
+      - ./reports:/app/reports
+    command: >-
+      python src/main.py --input data/sample_orders.csv --backend mongo
+      --reports reports/results.json
+volumes:
+  mongo-data:
