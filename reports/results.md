@@ -99,3 +99,9 @@ python3 -m compileall -q src tests scripts -> passed
 ## القيود المعروفة
 
 لم يتم تشغيل Docker/Compose لأن Docker daemon غير متوفر في بيئة التنفيذ؛ ملفات `Dockerfile` و`docker-compose.yml` موجودة للتشغيل على جهاز الدكتور. لم تُنشأ لقطات Compass أو Spark UI وهمية؛ يمكن التقاطها عند تشغيل MongoDB وSpark محليًا أو على Cluster. كما أن `local[2]` ليس Spark Cluster مستقلًا، لذلك لا يمثل Path A.
+
+## References
+
+[1]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write-config/ MongoDB, “Batch Write Configuration Options — Spark Connector.”
+
+[2]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write/ MongoDB, “Write to MongoDB in Batch Mode — Spark Connector.”

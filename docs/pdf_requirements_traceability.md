@@ -37,3 +37,9 @@
 ## القيود المعلنة
 
 لم يُدّعَ تشغيل Spark Standalone Cluster على جهازين أو معالجة مليون سجل، لأن بيئة التنفيذ الحالية جهاز/حاوية واحدة؛ هذا المسار مطلوب للمجموعات فقط وليس شرطًا للطالب الفردي. كما أن MongoDB Compass واجهة رسومية خارج البيئة، لذلك يقدم المشروع collections والفهارس ونتائج mongosh القابلة للتصوير بدل اختلاق screenshot. مسار Docker وCompose موفر للتسليم ولكنه يحتاج Docker daemon خارجيًا للتشغيل.
+
+## References
+
+[1]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write-config/ MongoDB, “Batch Write Configuration Options — Spark Connector.”
+
+[2]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write/ MongoDB, “Write to MongoDB in Batch Mode — Spark Connector.”
