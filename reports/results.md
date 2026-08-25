@@ -84,7 +84,7 @@ PYTHONPATH=src python3 src/main.py \
 ## الاختبارات
 
 ```text
-PYTHONPATH=src python3 -m pytest -q       -> 7 passed
+PYTHONPATH=src python3 -m pytest -q       -> 15 passed
 ruff check src tests scripts              -> All checks passed
 ruff format --check src tests scripts      -> All files formatted
 python3 -m compileall -q src tests scripts -> passed

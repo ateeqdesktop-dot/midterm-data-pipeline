@@ -27,7 +27,7 @@
 
 | الدليل | الأمر/الملف | النتيجة |
 |---|---|---|
-| Unit/integration tests | `PYTHONPATH=src python3 -m pytest -q` | 7 اختبارات ناجحة |
+| Unit/integration tests | `PYTHONPATH=src python3 -m pytest -q` | 15 اختبارًا ناجحًا |
 | Lint/format | `ruff check src tests scripts` و`ruff format --check src tests scripts` | بلا أخطاء |
 | Python + MongoDB | `src/main.py --engine python_batch --backend mongo --check-idempotency` | Raw 7، Validated 3، Quarantine 4، Idempotent |
 | PySpark + MongoDB | `src/main.py --engine pyspark --backend mongo --spark-master local[2]` | Raw 7، Validated 3، Quarantine 4، Connector write ناجح |

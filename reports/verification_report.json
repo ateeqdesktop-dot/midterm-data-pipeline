@@ -1,0 +1,80 @@
+{
+  "checks": [
+    {
+      "command": "/usr/bin/python3 -m pytest -q",
+      "name": "pytest",
+      "passed": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "...............                                                          [100%]\n"
+    },
+    {
+      "command": "ruff check src tests scripts",
+      "name": "ruff_check",
+      "passed": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "\u001b[1;32mAll checks passed!\u001b[0m\n"
+    },
+    {
+      "command": "ruff format --check src tests scripts",
+      "name": "ruff_format",
+      "passed": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "17 files already formatted\n"
+    },
+    {
+      "command": "/usr/bin/python3 -m compileall -q src tests scripts",
+      "name": "compileall",
+      "passed": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    }
+  ],
+  "mongodb": {
+    "collections": {
+      "orders_quarantine": 4,
+      "orders_raw": 14,
+      "orders_validated": 3
+    },
+    "passed": true,
+    "quarantine_indexes": [
+      "_id_",
+      "uq_quarantine_source_row"
+    ],
+    "validated_indexes": [
+      "_id_",
+      "uq_order_id"
+    ]
+  },
+  "packages": {
+    "missing": [],
+    "passed": true,
+    "versions": {
+      "mongomock": "4.3.0",
+      "pandas": "2.3.2",
+      "pymongo": "4.15.0",
+      "pyspark": "4.0.1",
+      "pytest": "9.1.1",
+      "ruff": "0.16.4"
+    }
+  },
+  "passed": true,
+  "pdf_traceability": {
+    "missing_sections": [],
+    "passed": true
+  },
+  "project_root": "/home/ubuntu/midterm-data-pipeline",
+  "required_files": {
+    "missing": [],
+    "passed": true
+  },
+  "results_json": {
+    "consistency_check": true,
+    "idempotency_passed": true,
+    "missing_metrics": [],
+    "passed": true
+  }
+}

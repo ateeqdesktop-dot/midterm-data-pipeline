@@ -33,19 +33,32 @@ def run_batch(
         if not (raw_batch or valid_batch or quarantine_batch):
             return
         batch_started = time.perf_counter()
-        if raw_batch:
-            repo.insert_raw(raw_batch)
-        outcome = repo.upsert_final(valid_batch, quarantine_batch)
+        batch_number = metrics.batches + 1
+        try:
+            if raw_batch:
+                repo.insert_raw(raw_batch)
+            outcome = repo.upsert_final(valid_batch, quarantine_batch)
+        except Exception as exc:
+            metrics.notes.append(f"batch={batch_number} failed: {exc.__class__.__name__}: {exc}")
+            print(f"[python_batch] batch={batch_number} failed: {exc}")
+            raise
         metrics.inserted_count += outcome["inserted_count"]
         metrics.updated_count += outcome["updated_count"]
         metrics.unchanged_count += outcome["unchanged_count"]
         metrics.batches += 1
+        elapsed = time.perf_counter() - batch_started
+        rate = len(raw_batch) / elapsed if elapsed else 0.0
         metrics.batch_timings.append(
             {
                 "batch_number": metrics.batches,
                 "rows": len(raw_batch),
-                "elapsed_seconds": round(time.perf_counter() - batch_started, 6),
+                "elapsed_seconds": round(elapsed, 6),
+                "throughput_rows_per_second": round(rate, 3),
             }
+        )
+        print(
+            f"[python_batch] batch={metrics.batches} rows={len(raw_batch)} "
+            f"elapsed_seconds={elapsed:.6f} throughput={rate:.3f} rows/sec"
         )
         raw_batch = []
         valid_batch = []
