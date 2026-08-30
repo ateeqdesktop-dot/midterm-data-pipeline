@@ -24,12 +24,15 @@ def build_spark_session() -> SparkSession:
     mongo_connector_pkg = "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0"
     project_root = str(settings.BASE_DIR)
     
+    driver_host = os.getenv("SPARK_DRIVER_HOST", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
+    bind_addr = "0.0.0.0" if driver_host not in ("127.0.0.1", "localhost") else "127.0.0.1"
+    
     # Configure Spark Session
     builder = SparkSession.builder \
         .appName(settings.SPARK_APP_NAME) \
         .master(settings.SPARK_MASTER) \
-        .config("spark.driver.host", "127.0.0.1") \
-        .config("spark.driver.bindAddress", "127.0.0.1") \
+        .config("spark.driver.host", driver_host) \
+        .config("spark.driver.bindAddress", bind_addr) \
         .config("spark.mongodb.read.connection.uri", f"{settings.MONGO_URI}/{settings.MONGO_DB_NAME}") \
         .config("spark.mongodb.write.connection.uri", f"{settings.MONGO_URI}/{settings.MONGO_DB_NAME}") \
         .config("spark.jars.packages", mongo_connector_pkg) \
