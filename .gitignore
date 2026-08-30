@@ -1,0 +1,120 @@
+# ============================
+# Python
+# ============================
+venv/
+.venv/
+midterm data pipeline project.pdf
+env/
+TODO.md
+.agents
+data
+.env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================
+# PySpark / Spark
+# ============================
+spark-warehouse/
+metastore_db/
+derby.log
+*.jar
+spark/work/
+spark/logs/
+
+# ============================
+# MongoDB Local Data
+# ============================
+data/db_test/
+data/db/
+
+# ============================
+# Large Data Files (> 50MB)
+# ============================
+data/orders_huge_mixed_quality.csv
+data/orders_1m.csv
+data/spark_test_orders.csv
+*.7z
+*.zip
+*.tar.gz
+*.tar.bz2
+*.rar
+
+# ============================
+# Logs & Temp Files
+# ============================
+logs/
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# ============================
+# Jupyter Notebook
+# ============================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ============================
+# IDE & Editors
+# ============================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# ============================
+# OS Files
+# ============================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ============================
+# Environment Variables
+# ============================
+.env
+.env.local
+.env.*.local
+
+# ============================
+# Coverage & Testing
+# ============================
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.tox/
+.nox/
+
+# ============================
+# Distribution / Packaging
+# ============================
+*.manifest
+*.spec
+MANIFEST
+
+# ============================
+# Agents / AI Config (optional)
+# ============================
+# .agents/
+skills-lock.json
