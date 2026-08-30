@@ -212,3 +212,15 @@ PYTHONPATH=. ./venv/bin/python src/main.py --input data/sample_orders.csv --incr
 - **Memory Safety (O(1) Space)**: تتم معالجة وتدفق البيانات برمجياً عبر MongoDB Cursors ودفعات (chunks) حجمها `5000` للحماية من استهلاك ذاكرة الخادم (Out of Memory) على الملفات المليونية.
 - **Robust Database Fallback**: تم دعم كتابة PySpark عبر `MongoDB Spark Connector` مع تصميم معمارية fallback برمجية تقوم بالـ bulk write الموازي مباشرة من Spark Executors في حال عدم توفر مكتبات الـ JAR محلياً.
 - **Idempotency & Version Handling**: كتابة بالـ `bulk upsert` بناءً على الـ Business Key الفريد للطلب (`order_id`) لمنع حدوث duplicate وحماية تسلسل التحديثات بالـ `order_date`.
+
+---
+
+## 📚 الوثائق والأدلة التفصيلية (Documentation)
+
+| الدليل | الوصف والمحتوى | الرابط |
+|---|---|---|
+| **دليل سطر الأوامر (CLI Guide)** | مرجع شامل لكافة أوامر التشغيل، المعاملات، ومتغيرات البيئة | [`docs/cli_guide.md`](file:///home/ateeq/Desktop/proggime/programs_python/Big_Data/midetarm/docs/cli_guide.md) |
+| **دليل عنقود سبارك (Cluster Guide)** | شرح العنقود الموزع، إعداد الأجهزة، ومقارنة أداء 1,000,000 سجل | [`docs/cluster_guide.md`](file:///home/ateeq/Desktop/proggime/programs_python/Big_Data/midetarm/docs/cluster_guide.md) |
+| **لقطات الشاشة (Screenshots)** | لقطات واجهة Spark Master و Worker و MongoDB Compass | [`reports/screenshots/README.md`](file:///home/ateeq/Desktop/proggime/programs_python/Big_Data/midetarm/reports/screenshots/README.md) |
+| **شرح الكود التفصيلي (Code Docs)** | شرح معماري وسطر بسطر لجميع ملفات المشروع | [`docs/code_explanation.md`](file:///home/ateeq/Desktop/proggime/programs_python/Big_Data/midetarm/docs/code_explanation.md) |
+
