@@ -55,6 +55,7 @@ data/spark_test_orders.csv
 # Logs & Temp Files
 # ============================
 logs/
+scratch/
 *.log
 *.tmp
 *.bak

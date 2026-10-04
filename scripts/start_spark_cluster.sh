@@ -9,7 +9,14 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SPARK_BIN="$PROJECT_ROOT/venv/lib/python3.12/site-packages/pyspark/bin/spark-class"
+export SPARK_HOME="$PROJECT_ROOT/venv/lib/python3.12/site-packages/pyspark"
+export PATH="$SPARK_HOME/bin:$PATH"
+export PYTHONPATH="$PROJECT_ROOT"
+
+# JVM 17 Module Access Flags
+export _JAVA_OPTIONS="--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
+
+SPARK_BIN="$SPARK_HOME/bin/spark-class"
 LOGS_DIR="$PROJECT_ROOT/logs/spark"
 mkdir -p "$LOGS_DIR"
 

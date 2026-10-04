@@ -1,0 +1,105 @@
+[
+  {
+    "query": {
+      "id": "query_1_customer",
+      "name": "Orders by Customer (Single Field Index)",
+      "query_desc": "db.orders_validated.find({'customer_id': 'عميل-0'}).limit(10)",
+      "collection": "orders_validated",
+      "filter": {
+        "customer_id": "عميل-0"
+      },
+      "limit": 10,
+      "target_index": "idx_customer_id",
+      "index_type": "Single Field Index {customer_id: 1}",
+      "problem_ar": "عند البحث عن طلبات عميل محدد، تقوم قاعدة البيانات بمسح كامل الجدول (COLLSCAN) وفحص ملايين السجلات مما يؤدي لاستهلاك عالي للذاكرة وبطء شديد.",
+      "solution_ar": "إنشاء فهرس أحادي على customer_id للوصول المباشر لسجلات العميل عبر B-Tree دون مسح الجدول."
+    },
+    "before": {
+      "executionTimeMillis": 3873,
+      "totalDocsExamined": 7780451,
+      "totalKeysExamined": 0,
+      "nReturned": 1,
+      "scanType": "COLLSCAN",
+      "indexName": null,
+      "winningPlanStage": "LIMIT"
+    },
+    "after": {
+      "executionTimeMillis": 0,
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1,
+      "nReturned": 1,
+      "scanType": "IXSCAN",
+      "indexName": "idx_customer_id",
+      "winningPlanStage": "LIMIT"
+    }
+  },
+  {
+    "query": {
+      "id": "query_2_city_status",
+      "name": "Orders by City and Status (Compound Index)",
+      "query_desc": "db.orders_validated.find({'city': 'صنعاء', 'status': 'مؤكد'}).limit(100)",
+      "collection": "orders_validated",
+      "filter": {
+        "city": "صنعاء",
+        "status": "مؤكد"
+      },
+      "limit": 100,
+      "target_index": "idx_city_status",
+      "index_type": "Compound Index {city: 1, status: 1}",
+      "problem_ar": "عمليات الفلترة المزدوجة لشركات الخدمات اللوجستية تتطلب تصفية كل من المدينة والحالة، وبدون فهرس مركب يتم فحص كل المستندات أو استخدام فهرس جزئي ثم فلترة الباقي في الذاكرة.",
+      "solution_ar": "إنشاء فهرس مركب بترتيب (city, status) لمطابقة شرط التساوي لكلا الحقلين مباشرة باستخدام IXSCAN."
+    },
+    "before": {
+      "executionTimeMillis": 15,
+      "totalDocsExamined": 2260,
+      "totalKeysExamined": 0,
+      "nReturned": 100,
+      "scanType": "COLLSCAN",
+      "indexName": null,
+      "winningPlanStage": "COLLSCAN"
+    },
+    "after": {
+      "executionTimeMillis": 0,
+      "totalDocsExamined": 100,
+      "totalKeysExamined": 100,
+      "nReturned": 100,
+      "scanType": "IXSCAN",
+      "indexName": "idx_city_status",
+      "winningPlanStage": "LIMIT"
+    }
+  },
+  {
+    "query": {
+      "id": "query_3_quarantine",
+      "name": "Quarantine by Error Code (Multikey Array Index)",
+      "query_desc": "db.orders_quarantine.find({'error_codes': 'CORRUPTED_ITEMS_JSON'}).limit(50)",
+      "collection": "orders_quarantine",
+      "filter": {
+        "error_codes": "CORRUPTED_ITEMS_JSON"
+      },
+      "limit": 50,
+      "target_index": "idx_quarantine_error_codes",
+      "index_type": "Multikey Index {error_codes: 1}",
+      "problem_ar": "مراقبة وفرز سجلات العزل حسب كود الخطأ تتطلب قراءة كل سجلات العزل وفحص مصفوفة الأخطاء يدوياً عند كل استعلام.",
+      "solution_ar": "إنشاء فهرس متعدد المفاتيح (Multikey) على مصفوفة error_codes للقفز الفوري للسجلات التي تحتوي الخطأ المحدد."
+    },
+    "before": {
+      "executionTimeMillis": 35,
+      "totalDocsExamined": 1850,
+      "totalKeysExamined": 0,
+      "nReturned": 50,
+      "scanType": "COLLSCAN",
+      "indexName": null,
+      "winningPlanStage": "COLLSCAN"
+    },
+    "after": {
+      "executionTimeMillis": 0,
+      "totalDocsExamined": 50,
+      "totalKeysExamined": 50,
+      "nReturned": 50,
+      "scanType": "IXSCAN",
+      "indexName": "idx_quarantine_error_codes",
+      "winningPlanStage": "LIMIT"
+    }
+  }
+]

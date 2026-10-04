@@ -1,0 +1,45 @@
+{
+  "report_name": "daily_data_health_and_quarantine_audit",
+  "generated_at": "2026-10-04T20:38:42.071054+00:00",
+  "collections_summary": {
+    "orders_raw_estimated": 27293811,
+    "orders_validated_estimated": 7780451,
+    "orders_quarantine_estimated": 963231
+  },
+  "quarantine_error_breakdown": [
+    {
+      "error_code": "INVALID_IMPOSSIBLE_DATE",
+      "count": 392254
+    },
+    {
+      "error_code": "CORRUPTED_ITEMS_JSON",
+      "count": 197702
+    },
+    {
+      "error_code": "MISSING_CUSTOMER_ID",
+      "count": 190192
+    },
+    {
+      "error_code": "EMPTY_ITEMS",
+      "count": 94537
+    },
+    {
+      "error_code": "MISSING_ORDER_ID",
+      "count": 94481
+    },
+    {
+      "error_code": "UNKNOWN_PRICE",
+      "count": 94204
+    },
+    {
+      "error_code": "MULTIPLE_CONFLICTING_ERRORS",
+      "count": 94204
+    },
+    {
+      "error_code": "DUPLICATE_ORDER_ID",
+      "count": 90223
+    }
+  ],
+  "system_health": "healthy",
+  "_id": "6ac2b9522b3524a86d30f070"
+}

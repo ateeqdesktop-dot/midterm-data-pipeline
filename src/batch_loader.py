@@ -1,6 +1,6 @@
 import csv
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any
 import pymongo
 from config import settings

@@ -27,12 +27,29 @@ def build_spark_session() -> SparkSession:
     driver_host = os.getenv("SPARK_DRIVER_HOST", os.getenv("SPARK_LOCAL_IP", "127.0.0.1"))
     bind_addr = "0.0.0.0" if driver_host not in ("127.0.0.1", "localhost") else "127.0.0.1"
     
+    java_opens_flags = (
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED "
+        "--add-opens=java.base/java.lang=ALL-UNNAMED "
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED "
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED "
+        "--add-opens=java.base/java.io=ALL-UNNAMED "
+        "--add-opens=java.base/java.net=ALL-UNNAMED "
+        "--add-opens=java.base/java.nio=ALL-UNNAMED "
+        "--add-opens=java.base/java.util=ALL-UNNAMED "
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED "
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED "
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED "
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
+    )
+    
     # Configure Spark Session
     builder = SparkSession.builder \
         .appName(settings.SPARK_APP_NAME) \
         .master(settings.SPARK_MASTER) \
         .config("spark.driver.host", driver_host) \
         .config("spark.driver.bindAddress", bind_addr) \
+        .config("spark.driver.extraJavaOptions", java_opens_flags) \
+        .config("spark.executor.extraJavaOptions", java_opens_flags) \
         .config("spark.mongodb.read.connection.uri", f"{settings.MONGO_URI}/{settings.MONGO_DB_NAME}") \
         .config("spark.mongodb.write.connection.uri", f"{settings.MONGO_URI}/{settings.MONGO_DB_NAME}") \
         .config("spark.jars.packages", mongo_connector_pkg) \
