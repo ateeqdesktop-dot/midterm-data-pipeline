@@ -1,182 +1,101 @@
-from __future__ import annotations
+import pymongo
+from config import settings
 
-from collections.abc import Iterable
-from typing import Any
+def get_mongo_client():
+    """Returns a PyMongo MongoClient instance."""
+    return pymongo.MongoClient(settings.MONGO_URI)
 
-from pymongo import MongoClient, UpdateOne
+def get_database(client=None):
+    """Returns the MongoDB database instance."""
+    if client is None:
+        client = get_mongo_client()
+    return client[settings.MONGO_DB_NAME]
 
-VALIDATED_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["order_id", "customer_id", "quality_status", "error_codes"],
-        "properties": {
-            "order_id": {"bsonType": "string", "minLength": 1},
-            "customer_id": {"bsonType": "string", "minLength": 1},
-            "quality_status": {"enum": ["valid", "corrected"]},
-            "error_codes": {"bsonType": "array"},
-        },
-    }
-}
-RAW_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["run_id", "source_file", "source_row_number", "raw_record"],
-        "properties": {
-            "run_id": {"bsonType": "string"},
-            "source_file": {"bsonType": "string"},
-            "source_row_number": {"bsonType": ["int", "long"]},
-            "raw_record": {"bsonType": "object"},
-        },
-    }
-}
-QUARANTINE_VALIDATOR = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": [
-            "source_file",
-            "source_row_number",
-            "quality_status",
-            "error_codes",
-            "raw_record",
-        ],
-        "properties": {
-            "source_file": {"bsonType": "string"},
-            "source_row_number": {"bsonType": ["int", "long", "string"]},
-            "quality_status": {"enum": ["quarantined"]},
-            "error_codes": {"bsonType": "array", "minItems": 1},
-            "raw_record": {"bsonType": "object"},
-        },
-    }
-}
-
-
-class MongoRepository:
-    def __init__(self, uri: str, database: str, client: Any | None = None) -> None:
-        self.client = client or MongoClient(uri, serverSelectionTimeoutMS=3000)
-        self.db = self.client[database]
-        self.db.command("ping")
-        self.setup()
-
-    def _ensure_collection(self, name: str, validator: dict[str, Any]) -> None:
-        try:
-            if name not in self.db.list_collection_names():
-                self.db.create_collection(
-                    name,
-                    validator=validator,
-                    validationLevel="strict",
-                    validationAction="error",
-                )
-            else:
-                self.db.command(
-                    "collMod",
-                    name,
-                    validator=validator,
-                    validationLevel="strict",
-                    validationAction="error",
-                )
-        except Exception as exc:
-            # mongomock does not implement MongoDB validator/collMod; real MongoDB does.
-            if isinstance(exc, NotImplementedError) or exc.__class__.__module__.startswith(
-                "mongomock"
-            ):
-                if name not in self.db.list_collection_names():
-                    self.db.create_collection(name)
-            else:
-                raise
-
-    def setup(self) -> None:
-        self._ensure_collection("orders_raw", RAW_VALIDATOR)
-        self._ensure_collection("orders_validated", VALIDATED_VALIDATOR)
-        self._ensure_collection("orders_quarantine", QUARANTINE_VALIDATOR)
-        self.db.orders_validated.create_index("order_id", unique=True, name="uq_order_id")
-        self.db.orders_quarantine.create_index(
-            [("source_file", 1), ("source_row_number", 1)],
-            unique=True,
-            name="uq_quarantine_source_row",
-        )
-        self.db.orders_raw.create_index([("run_id", 1), ("source_row_number", 1)])
-
-    def close(self) -> None:
-        self.client.close()
-
-    def insert_raw(self, rows: Iterable[dict[str, Any]]) -> int:
-        docs = list(rows)
-        if not docs:
-            return 0
-        self.db.orders_raw.insert_many(docs, ordered=False)
-        return len(docs)
-
-    def upsert_final(
-        self, rows: Iterable[dict[str, Any]], quarantine: Iterable[dict[str, Any]]
-    ) -> dict[str, int]:
-        valid = list(rows)
-        bad = list(quarantine)
-        if bad:
-            operations = [
-                UpdateOne(
-                    {
-                        "source_file": row["source_file"],
-                        "source_row_number": row["source_row_number"],
+def setup_mongodb():
+    """Sets up the collections, validators, and indexes for the project."""
+    client = get_mongo_client()
+    db = get_database(client)
+    
+    print(f"Setting up MongoDB database: '{settings.MONGO_DB_NAME}'...")
+    
+    # 1. raw collection: no validators, no unique indexes to allow all dirty data
+    if settings.COLLECTION_RAW not in db.list_collection_names():
+        db.create_collection(settings.COLLECTION_RAW)
+        print(f"Collection '{settings.COLLECTION_RAW}' created.")
+    
+    # Create indexes on orders_raw for efficient queries by run_id
+    db[settings.COLLECTION_RAW].create_index("run_id")
+    print(f"Created index on 'run_id' in '{settings.COLLECTION_RAW}'.")
+    
+    # Idempotency index: prevents duplicate raw records on re-run of same run_id
+    db[settings.COLLECTION_RAW].create_index(
+        [("run_id", pymongo.ASCENDING), ("source_row_number", pymongo.ASCENDING)],
+        unique=True,
+        name="idx_idempotency_raw"
+    )
+    print(f"Compound Unique Index 'idx_idempotency_raw' created on '{settings.COLLECTION_RAW}' for Idempotency.")
+    
+    # 2. validated collection: stable business key (order_id) must be unique
+    if settings.COLLECTION_VALIDATED not in db.list_collection_names():
+        # Let's create with validator to ensure proper types if required, or at least structure
+        validation_schema = {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": ["order_id", "order_date", "customer_id", "customer_name", "total_amount", "currency", "items_json"],
+                "properties": {
+                    "order_id": {
+                        "bsonType": "string",
+                        "description": "must be a string and is required"
                     },
-                    {"$set": row},
-                    upsert=True,
-                )
-                for row in bad
-            ]
-            try:
-                self.db.orders_quarantine.bulk_write(operations, ordered=False)
-            except TypeError as exc:
-                # Older mongomock releases do not accept PyMongo's newer sort argument.
-                if "sort" not in str(exc):
-                    raise
-                for row in bad:
-                    self.db.orders_quarantine.update_one(
-                        {
-                            "source_file": row["source_file"],
-                            "source_row_number": row["source_row_number"],
-                        },
-                        {"$set": row},
-                        upsert=True,
-                    )
-        inserted = updated = unchanged = 0
-        ignored = {
-            "_id",
-            "run_id",
-            "source_file",
-            "source_row_number",
-            "ingested_at",
-            "engine_used",
+                    "customer_id": {
+                        "bsonType": "string",
+                        "description": "must be a string and is required"
+                    },
+                    "total_amount": {
+                        "bsonType": "double",
+                        "description": "must be a double and is required"
+                    },
+                    "currency": {
+                        "bsonType": "string",
+                        "description": "must be a string and is required"
+                    }
+                }
+            }
         }
-        for row in valid:
-            key = {"order_id": row["order_id"]}
-            old = self.db.orders_validated.find_one(key)
-            if old is None:
-                self.db.orders_validated.update_one(key, {"$set": row}, upsert=True)
-                inserted += 1
-                continue
-            old_business = {k: v for k, v in old.items() if k not in ignored}
-            new_business = {k: v for k, v in row.items() if k not in ignored}
-            if old_business == new_business:
-                unchanged += 1
-            else:
-                self.db.orders_validated.update_one(key, {"$set": row}, upsert=True)
-                updated += 1
-        return {"inserted_count": inserted, "updated_count": updated, "unchanged_count": unchanged}
+        try:
+            db.create_collection(
+                settings.COLLECTION_VALIDATED,
+                validator=validation_schema
+            )
+            print(f"Collection '{settings.COLLECTION_VALIDATED}' created with jsonSchema validation.")
+        except Exception as e:
+            # Fallback in case of strict BSON type errors or environment limitations
+            db.create_collection(settings.COLLECTION_VALIDATED)
+            print(f"Collection '{settings.COLLECTION_VALIDATED}' created without schema validator: {e}")
+            
+    # Create Unique Index on order_id
+    db[settings.COLLECTION_VALIDATED].create_index([("order_id", pymongo.ASCENDING)], unique=True)
+    print(f"Unique Index on 'order_id' created in '{settings.COLLECTION_VALIDATED}'.")
+    
+    # Index on run_id for performance
+    db[settings.COLLECTION_VALIDATED].create_index("run_id")
+    
+    # Version protection: index on order_date for efficient version comparison
+    db[settings.COLLECTION_VALIDATED].create_index("order_date", name="idx_version_date")
+    print(f"Version Index 'idx_version_date' created on '{settings.COLLECTION_VALIDATED}' for Version Protection.")
+    
+    # 3. quarantine collection: for records that failed validation
+    if settings.COLLECTION_QUARANTINE not in db.list_collection_names():
+        db.create_collection(settings.COLLECTION_QUARANTINE)
+        print(f"Collection '{settings.COLLECTION_QUARANTINE}' created.")
+        
+    # Non-unique indexes on orders_quarantine for query performance
+    db[settings.COLLECTION_QUARANTINE].create_index("order_id")
+    db[settings.COLLECTION_QUARANTINE].create_index("run_id")
+    print(f"Indexes created on 'order_id' and 'run_id' in '{settings.COLLECTION_QUARANTINE}'.")
+    
+    client.close()
+    print("MongoDB setup completed successfully.")
 
-    def counts(self) -> dict[str, int]:
-        return {
-            name: self.db[name].count_documents({})
-            for name in ("orders_raw", "orders_validated", "orders_quarantine")
-        }
-
-
-class MemoryRepository:
-    """mongomock-backed repository for deterministic tests and offline demo."""
-
-    def __init__(self, database: str = "midterm_orders") -> None:
-        import mongomock
-
-        self._repo = MongoRepository("mongodb://mock", database, client=mongomock.MongoClient())
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._repo, name)
+if __name__ == "__main__":
+    setup_mongodb()

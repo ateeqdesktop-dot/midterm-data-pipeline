@@ -1,118 +1,118 @@
-from __future__ import annotations
-
 import csv
 import time
-import uuid
-from pathlib import Path
-from typing import Any
+from datetime import datetime, timezone
+from typing import Dict, List, Any
+import pymongo
+from config import settings
+from src import mongo_setup
 
-from metrics import RunMetrics, write_results
-from quality_rules import clean_order
-
-
-def run_batch(
-    input_path: Path, repo: Any, reports_path: Path, batch_size: int = 1000
-) -> RunMetrics:
-    """Run the small-file path with bounded memory and Mongo insert_many batches."""
-    if batch_size < 1:
-        raise ValueError("batch_size must be positive")
-
-    started = time.perf_counter()
-    run_id = uuid.uuid4().hex[:12]
-    size_mb = input_path.stat().st_size / (1024 * 1024)
-    metrics = RunMetrics(
-        run_id, input_path.name, round(size_mb, 6), "python_batch", batch_size=batch_size
-    )
-    raw_batch: list[dict[str, Any]] = []
-    valid_batch: list[dict[str, Any]] = []
-    quarantine_batch: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-
-    def flush() -> None:
-        nonlocal raw_batch, valid_batch, quarantine_batch
-        if not (raw_batch or valid_batch or quarantine_batch):
-            return
-        batch_started = time.perf_counter()
-        batch_number = metrics.batches + 1
-        try:
-            if raw_batch:
-                repo.insert_raw(raw_batch)
-            outcome = repo.upsert_final(valid_batch, quarantine_batch)
-        except Exception as exc:
-            metrics.notes.append(f"batch={batch_number} failed: {exc.__class__.__name__}: {exc}")
-            print(f"[python_batch] batch={batch_number} failed: {exc}")
-            raise
-        metrics.inserted_count += outcome["inserted_count"]
-        metrics.updated_count += outcome["updated_count"]
-        metrics.unchanged_count += outcome["unchanged_count"]
-        metrics.batches += 1
-        elapsed = time.perf_counter() - batch_started
-        rate = len(raw_batch) / elapsed if elapsed else 0.0
-        metrics.batch_timings.append(
-            {
-                "batch_number": metrics.batches,
-                "rows": len(raw_batch),
-                "elapsed_seconds": round(elapsed, 6),
-                "throughput_rows_per_second": round(rate, 3),
-            }
-        )
-        print(
-            f"[python_batch] batch={metrics.batches} rows={len(raw_batch)} "
-            f"elapsed_seconds={elapsed:.6f} throughput={rate:.3f} rows/sec"
-        )
-        raw_batch = []
-        valid_batch = []
-        quarantine_batch = []
-
-    with input_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row_number, raw in enumerate(reader, start=2):
-            raw_record = dict(raw)
-            raw_batch.append(
-                {
+def load_csv_in_batches(file_path: str, run_id: str) -> int:
+    """
+    Reads a CSV file in a streaming fashion, chunks records into batches,
+    and inserts them into the raw collection in MongoDB.
+    """
+    start_time = time.time()
+    total_records = 0
+    batch_count = 0
+    
+    print(f"Starting Python Batch Loader...")
+    print(f"  Source File: {file_path}")
+    print(f"  Run ID: {run_id}")
+    print(f"  Batch Size: {settings.BATCH_SIZE}")
+    
+    # Establish MongoDB Connection
+    client = mongo_setup.get_mongo_client()
+    db = mongo_setup.get_database(client)
+    raw_collection = db[settings.COLLECTION_RAW]
+    
+    current_batch: List[Dict[str, Any]] = []
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8-sig', errors='replace') as f:
+            # Using DictReader to map column names to values
+            # If the CSV has a BOM (Byte Order Mark) like '\ufefforder_id', utf-8-sig handles it.
+            reader = csv.DictReader(f)
+            
+            # Start streaming
+            for i, row in enumerate(reader, start=1):
+                # Clean row dictionary keys (strip any weird whitespace or characters)
+                cleaned_row = {k.strip() if k else "": v for k, v in row.items()}
+                
+                # Construct raw ELT record structure
+                raw_document = {
                     "run_id": run_id,
-                    "source_file": input_path.name,
-                    "source_row_number": row_number,
-                    "ingested_at": time.time(),
+                    "source_file": file_path,
+                    "source_row_number": i,
+                    "ingested_at": datetime.utcnow(),
                     "engine_used": "python_batch",
-                    "raw_record": raw_record,
+                    "raw_record": cleaned_row
                 }
-            )
-            metrics.rows_read += 1
-            metrics.raw_loaded += 1
-            cleaned = clean_order(raw_record)
-            cleaned.update(
-                {
-                    "run_id": run_id,
-                    "source_file": input_path.name,
-                    "source_row_number": row_number,
-                    "raw_record": raw_record,
-                }
-            )
-            if cleaned["order_id"] and cleaned["order_id"] in seen_ids:
-                cleaned["quality_status"] = "quarantined"
-                cleaned["error_codes"] = ["DUPLICATE_ORDER_ID"]
-                cleaned["error_details"] = [
-                    {"code": "DUPLICATE_ORDER_ID", "detail": "duplicate in this run"}
-                ]
-            if cleaned["order_id"]:
-                seen_ids.add(cleaned["order_id"])
-
-            if cleaned["quality_status"] == "valid":
-                metrics.valid_count += 1
-                valid_batch.append(cleaned)
-            elif cleaned["quality_status"] == "corrected":
-                metrics.corrected_count += 1
-                valid_batch.append(cleaned)
-            else:
-                metrics.quarantine_count += 1
-                quarantine_batch.append(cleaned)
-                for code in cleaned["error_codes"]:
-                    metrics.error_case_counts[code] = metrics.error_case_counts.get(code, 0) + 1
-
-            if len(raw_batch) >= batch_size:
-                flush()
-    flush()
-    metrics.finalize(time.perf_counter() - started)
-    write_results(metrics, reports_path)
-    return metrics
+                
+                current_batch.append(raw_document)
+                
+                # Check if batch is full
+                if len(current_batch) >= settings.BATCH_SIZE:
+                    batch_count += 1
+                    batch_start = time.time()
+                    
+                    try:
+                        raw_collection.insert_many(current_batch, ordered=False)
+                    except pymongo.errors.BulkWriteError as bwe:
+                        # Log bulk write errors but continue
+                        print(f"  [ERROR] Bulk Write Error in Batch {batch_count}: {bwe.details}")
+                    except Exception as e:
+                        print(f"  [ERROR] Failed to insert batch {batch_count}: {e}")
+                        
+                    batch_elapsed = time.time() - batch_start
+                    total_records += len(current_batch)
+                    
+                    # Calculate throughput
+                    elapsed_so_far = time.time() - start_time
+                    throughput = total_records / elapsed_so_far if elapsed_so_far > 0 else 0
+                    
+                    print(
+                        f"  Batch {batch_count:03d}: Inserted {len(current_batch)} records "
+                        f"in {batch_elapsed:.3f}s | Cumulative: {total_records} | "
+                        f"Rate: {throughput:.1f} rec/sec"
+                    )
+                    
+                    # Reset batch
+                    current_batch = []
+                    
+            # Insert remaining records
+            if current_batch:
+                batch_count += 1
+                batch_start = time.time()
+                try:
+                    raw_collection.insert_many(current_batch, ordered=False)
+                except pymongo.errors.BulkWriteError as bwe:
+                    print(f"  [ERROR] Bulk Write Error in Final Batch: {bwe.details}")
+                except Exception as e:
+                    print(f"  [ERROR] Failed to insert final batch: {e}")
+                
+                batch_elapsed = time.time() - batch_start
+                total_records += len(current_batch)
+                
+                elapsed_so_far = time.time() - start_time
+                throughput = total_records / elapsed_so_far if elapsed_so_far > 0 else 0
+                print(
+                    f"  Final Batch {batch_count:03d}: Inserted {len(current_batch)} records "
+                    f"in {batch_elapsed:.3f}s | Cumulative: {total_records} | "
+                    f"Rate: {throughput:.1f} rec/sec"
+                )
+                
+    except Exception as e:
+        print(f"Fatal error during Python Batch streaming: {e}")
+        raise
+    finally:
+        client.close()
+        
+    total_elapsed = time.time() - start_time
+    overall_throughput = total_records / total_elapsed if total_elapsed > 0 else 0
+    print(f"Python Batch Loading finished.")
+    print(f"  Total Ingested: {total_records} records")
+    print(f"  Total Time: {total_elapsed:.2f} seconds")
+    print(f"  Average Speed: {overall_throughput:.1f} records/second")
+    print("-" * 50)
+    
+    return total_records

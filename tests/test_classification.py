@@ -1,46 +1,168 @@
-import pytest
+import json
+from src.validation.quarantine_classifier import classify_quarantine_errors
+from src.validation.record_classifier import classify_and_tag_record
 
-from quality_rules import clean_order
-
-
-def _base(**overrides):
-    row = {
-        "order_id": "O-1",
-        "customer_id": "C-1",
-        "customer_email": "user@example.com",
-        "phone": "777123456",
-        "order_date": "2025-01-31",
-        "items": '[{"price": 2, "quantity": 1}]',
-        "price": "2",
-        "quantity": "1",
-        "shipping_cost": "0",
-        "total": "2",
-        "status": "confirmed",
+def test_classify_valid_record():
+    record = {
+        "order_id": "order-1",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "customer-1",
+        "customer_name": "Mohammed",
+        "total_amount": "5000.0",
+        "currency": "YER",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 5000.0, "total": 5000.0}])
     }
-    row.update(overrides)
-    return row
+    
+    seen_ids = set()
+    errors, details = classify_quarantine_errors(record, seen_ids)
+    assert len(errors) == 0
+    
+    enriched, status = classify_and_tag_record(record, record, [], seen_ids)
+    assert status == "valid"
+    assert enriched["quality_status"] == "valid"
 
+def test_classify_missing_order_id():
+    record = {
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "customer-1",
+        "total_amount": "5000.0",
+        "currency": "YER",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 5000.0, "total": 5000.0}])
+    }
+    
+    seen_ids = set()
+    errors, details = classify_quarantine_errors(record, seen_ids)
+    assert "MISSING_ORDER_ID" in errors
+    
+    enriched, status = classify_and_tag_record(record, record, [], seen_ids)
+    assert status == "quarantined"
+    assert "MISSING_ORDER_ID" in enriched["error_codes"]
+    assert "raw_record" in enriched
 
-@pytest.mark.parametrize(
-    ("overrides", "expected"),
-    [
-        ({"order_id": ""}, "MISSING_ORDER_ID"),
-        ({"customer_id": ""}, "MISSING_CUSTOMER_ID"),
-        ({"order_date": "2025-02-30"}, "INVALID_IMPOSSIBLE_DATE"),
-        ({"items": "not-json"}, "CORRUPTED_ITEMS_JSON"),
-        ({"items": "[]"}, "EMPTY_ITEMS"),
-        ({"price": "unknown"}, "UNKNOWN_PRICE"),
-        ({"price": "-5"}, "AMBIGUOUS_NEGATIVE_VALUE"),
-    ],
-)
-def test_official_quarantine_codes(overrides, expected):
-    result = clean_order(_base(**overrides))
-    assert result["quality_status"] == "quarantined"
-    assert expected in result["error_codes"]
-    assert result["error_details"]
+def test_classify_duplicate_order_id():
+    record = {
+        "order_id": "order-1",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "customer-1",
+        "total_amount": "5000.0",
+        "currency": "YER",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 5000.0, "total": 5000.0}])
+    }
+    
+    seen_ids = {"order-1"}
+    errors, details = classify_quarantine_errors(record, seen_ids)
+    assert "DUPLICATE_ORDER_ID" in errors
+    
+    enriched, status = classify_and_tag_record(record, record, [], seen_ids)
+    assert status == "quarantined"
+    assert "DUPLICATE_ORDER_ID" in enriched["error_codes"]
 
+def test_classify_negative_values():
+    record = {
+        "order_id": "order-1",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "customer-1",
+        "total_amount": "-500.0", # Negative
+        "currency": "YER",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": -50.0, "total": -50.0}])
+    }
+    
+    seen_ids = set()
+    errors, details = classify_quarantine_errors(record, seen_ids)
+    assert "AMBIGUOUS_NEGATIVE_VALUE" in errors
 
-def test_multiple_conflicting_errors_are_collapsed_to_official_code():
-    result = clean_order(_base(order_id="", order_date="2025-02-30", items="bad", price="unknown"))
-    assert result["quality_status"] == "quarantined"
-    assert result["error_codes"] == ["MULTIPLE_CONFLICTING_ERRORS"]
+def test_classify_multiple_conflicting_errors():
+    # missing customer id, impossible date, corrupted items
+    record = {
+        "order_id": "order-1",
+        "order_date": "invalid-date",
+        "total_amount": "5000.0",
+        "currency": "YER",
+        "items_json": "corrupted-json-string"
+    }
+    
+    seen_ids = set()
+    errors, details = classify_quarantine_errors(record, seen_ids)
+    assert "MISSING_CUSTOMER_ID" in errors
+    assert "INVALID_IMPOSSIBLE_DATE" in errors
+    assert "CORRUPTED_ITEMS_JSON" in errors
+    assert "MULTIPLE_CONFLICTING_ERRORS" in errors
+
+def test_classify_missing_customer_id():
+    record = {
+        "order_id": "order-101",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "",
+        "total_amount": "5000.0",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 5000.0, "total": 5000.0}])
+    }
+    errors, details = classify_quarantine_errors(record)
+    assert "MISSING_CUSTOMER_ID" in errors
+
+def test_classify_invalid_impossible_date():
+    for bad_date in ["1899-12-31T00:00:00", "2099-01-01T12:00:00", "invalid-date-string"]:
+        record = {
+            "order_id": "order-102",
+            "order_date": bad_date,
+            "customer_id": "cust-1",
+            "total_amount": "5000.0",
+            "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 5000.0, "total": 5000.0}])
+        }
+        errors, _ = classify_quarantine_errors(record)
+        assert "INVALID_IMPOSSIBLE_DATE" in errors
+
+def test_classify_corrupted_items_json():
+    record = {
+        "order_id": "order-103",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "cust-1",
+        "total_amount": "5000.0",
+        "items_json": "{not valid json at all"
+    }
+    errors, _ = classify_quarantine_errors(record)
+    assert "CORRUPTED_ITEMS_JSON" in errors
+
+def test_classify_empty_items():
+    record = {
+        "order_id": "order-104",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "cust-1",
+        "total_amount": "5000.0",
+        "items_json": "[]"
+    }
+    errors, _ = classify_quarantine_errors(record)
+    assert "EMPTY_ITEMS" in errors
+
+def test_classify_unknown_price():
+    record = {
+        "order_id": "order-105",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "cust-1",
+        "total_amount": "unknown",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": None}])
+    }
+    errors, _ = classify_quarantine_errors(record)
+    assert "UNKNOWN_PRICE" in errors
+
+def test_classify_negative_values_in_item_qty_or_price():
+    record = {
+        "order_id": "order-106",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "cust-1",
+        "total_amount": "5000.0",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": -2, "unit_price": 50.0, "total": -100.0}])
+    }
+    errors, _ = classify_quarantine_errors(record)
+    assert "AMBIGUOUS_NEGATIVE_VALUE" in errors
+
+def test_classify_single_argument_call():
+    record = {
+        "order_id": "order-107",
+        "order_date": "2025-01-01T12:00:00",
+        "customer_id": "cust-1",
+        "total_amount": "100.0",
+        "items_json": json.dumps([{"sku": "SKU-1", "name": "Item 1", "qty": 1, "unit_price": 100.0, "total": 100.0}])
+    }
+    errors, details = classify_quarantine_errors(record)
+    assert len(errors) == 0
+

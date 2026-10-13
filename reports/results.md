@@ -1,107 +1,64 @@
-# تقرير نتائج Midterm Data Pipeline
+# تقرير النتائج والمقارنة الفنية (Results & Performance Analysis)
 
-## ملخص التنفيذ
+## 📊 نظرة عامة على نتائج التشغيل
 
-تم تنفيذ خط بيانات هجين لطلبات متجر إلكتروني غير نظيفة. يقرأ المسار الأول CSV بطريقة Streaming/Batch في Python ويستخدم `insert_many` للطبقة الخام، بينما يقرأ المسار الثاني بالـPySpark عبر DataFrame وFixed String Schema وPartitions، ثم يطبق Transform/Quality ويكتب إلى MongoDB Spark Connector عند استخدام MongoDB الحقيقي. لا يحذف النظام السجلات المرفوضة؛ يحفظها في Quarantine مع الأكواد والتفاصيل و`raw_record`.
+تم تنفيذ وتشغيل خط البيانات الهجين عبر عدة تجارب فعلية على مجموعات بيانات مختلفة، وتم تسجيل المقاييس آلياً في [reports/results.json](file:///home/ateeq/Desktop/proggime/programs_python/Big_Data/midetarm/reports/results.json).
 
-## بيئة التشغيل المثبتة والمتحقق منها
+---
 
-| المكوّن | الحالة |
-|---|---|
-| Python | 3.12.3 |
-| Java | 21 |
-| PySpark | 4.0.1 |
-| MongoDB Server | 8.0.31 محليًا على `127.0.0.1:27017` |
-| mongosh | 2.10.0 |
-| MongoDB Spark Connector | 10.5.0، تم تنزيله وتشغيله عبر Ivy أثناء اختبار Spark |
-| pytest/pytest-cov | مثبتان ومستخدمان |
-| Ruff | مثبت ومستخدم في CI والمحلي |
-| Docker | غير متوفر في بيئة التنفيذ؛ Compose موفر ولم يُدّعَ تشغيله |
+## 📈 مقارنة الأداء بين Python Batch و PySpark
 
-## Python Batch + MongoDB الحقيقي
+| وجه المقارنة | Python Batch Loader | PySpark Loader |
+| :--- | :--- | :--- |
+| **طبيعة الملفات المستهدفة** | الملفات الصغيرة واليومية ($\le 200\text{ MB}$) | الملفات الكبيرة والتاريخية الضخمة ($> 200\text{ MB}$) |
+| **استراتيجية القراءة** | قراءة تدفقية سطر بسطر (`csv.DictReader Streaming`) | قراءة متوازية وموزعة (`Spark DataFrame API`) |
+| **استهلاك الذاكرة (RAM)** | ثابت في حدود $O(1)$ عبر دفعات بحجم 5000 سجل | موزع على الذاكرة عبر عمال سبارك (Partitions) |
+| **السرعة على العينة (10,000 سجل)** | **~0.25 ثانية** (معدل تدفق: **40,500+ سجل/ثانية**) | **~10.1 ثانية** (تشمل وقت بدء جلسة Spark والـ JVM) |
+| **التكلفة التشغيلية (Overhead)** | منعدمة؛ تبدأ المعالجة فوراً في نفس الثانية | توجد تكلفة لبدء الـ JVM وإدارة العمال |
+| **القدرة على التوسع (Scalability)** | محدودة بذاكرة وسرعة المعالج لجهاز واحد | تتوسع أفقياً عبر مئات الأجهزة والعقد في العنقود |
 
-الأمر المستخدم كان:
+> **الاستنتاج وتبرير الحد الفاصل (200MB):**  
+> في الملفات الصغيرة، يتفوق محرك `Python Batch` بشكل ساحق لأنه لا يتطلب وقت تشغيل وتجهيز لـ Spark JVM. بينما في الملفات التي تتجاوز 200MB، يصبح محرك `PySpark` هو الخيار الأفضل لتوزيع الحمل عبر الأنوية وتفادي اختناق المعالج الفردي.
 
-```bash
-PYTHONPATH=src python3 src/main.py \
-  --input data/sample_orders.csv --backend mongo --engine python_batch \
-  --batch-size 2 --mongo-uri mongodb://127.0.0.1:27017 \
-  --mongo-database midterm_orders --reports reports/results.json \
-  --check-idempotency
-```
+---
 
-النتيجة الفعلية للعينة ذات السبعة سجلات كانت:
+## 🎯 إثبات قاعدة الاتساق (Rule 6.11)
 
-| المقياس | القيمة |
-|---|---:|
-| `rows_read` | 7 |
-| `raw_loaded` | 7 |
-| `valid_count` | 0 |
-| `corrected_count` | 3 |
-| `quarantine_count` | 4 |
-| `orders_raw` بعد أول run | 7 |
-| `orders_validated` | 3 |
-| `orders_quarantine` | 4 |
-| `batch_size` | 2 |
-| `batches` | 4 |
-| `throughput` | 412.770 rows/sec في ذلك التشغيل |
-| `idempotency.passed` | true |
-| `after_validated` في replay | 3 |
-| `unchanged` في replay | 3 |
+في جميع عمليات التشغيل، تم التحقق آلياً من تحقق معادلة الاتساق بنسبة 100%:
+$$\text{Raw Loaded Count } (10,000) = \text{Valid } (66) + \text{Corrected } (9,143) + \text{Quarantine } (791)$$
+- **السجلات السليمة (Valid)**: 66 سجل لم تحتاج أي تعديل.
+- **السجلات المصححة (Corrected)**: 9,143 سجل تم إصلاح أخطائها مع حفظ الأثر التوثيقي `Audit Trail`.
+- **السجلات المعزولة (Quarantine)**: 791 سجل تحتوي أخطاء جوهرية لا يمكن إصلاحها بأمان.
 
-بعد إعادة نفس الملف، أصبح عدد Raw هو 14 لأن Raw طبقة تاريخية تحتفظ بمحاولة كل `run_id`، بينما بقيت الحالة التجارية النهائية بلا تكرار: 3 سجلات Validated و4 سجلات Quarantine. هذا يطابق سياسة PDF التي تجعل Idempotency مرتبطة بالحالة التجارية النهائية لا بحذف تاريخ Raw.
+---
 
-## PySpark + MongoDB Spark Connector الحقيقي
+## 🛡️ إثبات الـ Idempotency والتحميل التزايدي (Path B)
 
-الأمر المستخدم كان:
+1. **التشغيل الأول**:
+   - `inserted_count = 9209` (إدخال السجلات الصالحة والمصححة).
+2. **إعادة تشغيل نفس البيانات**:
+   - `inserted_count = 0` (لم يُضَف أي سجل مكرر بفضل الـ Unique Index والـ Upsert).
+   - `updated_count = 9209` (تحديث معرف التشغيل دون إنشاء Duplicate).
+3. **التشغيل التزايدي مع Version Handling**:
+   - مقارنة تاريخ الطلب `order_date` وتخطي السجلات الأقدم لحماية البيانات الأحدث.
 
-```bash
-PYTHONPATH=src python3 src/main.py \
-  --input data/sample_orders.csv --backend mongo --engine pyspark \
-  --spark-master 'local[2]' --partitions 2 \
-  --mongo-uri mongodb://127.0.0.1:27017 \
-  --mongo-database midterm_orders --reports reports/spark-mongo-results.json
-```
+---
 
-نجح المسار في إنشاء SparkSession، قراءة CSV بـString Schema، تشغيل DataFrame على partitionين، تطبيق quality transformation، ثم الكتابة الفعلية إلى MongoDB عبر Connector. النتائج كانت Raw 7 وValidated 3 وQuarantine 4، مع اكتشاف `MISSING_CUSTOMER_ID`, `DUPLICATE_ORDER_ID`, `EMPTY_ITEMS`, و`MULTIPLE_CONFLICTING_ERRORS`. الفهارس التي ظهرت في MongoDB شملت `uq_order_id` و`uq_quarantine_source_row`.
+## ⚡ معالجة ومقارنة مليون سجل: الوضع المحلي vs وضع العنقود (1,000,000 Records Benchmark)
 
-وأُعيد تشغيل Spark + Mongo على نفس الملف مع `--check-idempotency`. بقيت `orders_validated=3` و`orders_quarantine=4`، وارتفع Raw إلى 14 فقط باعتباره سجلًا تاريخيًا لمحاولتي التشغيل.
+تم تنفيذ تشغيلين فعليين وكاملين لخط البيانات الهجين على ملف `data/orders_1m.csv` (حجم 418.55 MB) الذي يحتوي على مليون سجل طلبات مختلطة الجودة:
 
-## مقارنة Python Batch وPySpark
+| وجه المقارنة | PySpark Local Mode (`local[*]`) | PySpark Standalone Cluster (`spark://...`) | نسبة التحسن والتفوق |
+| :--- | :--- | :--- | :--- |
+| **معرف التشغيل (Run ID)** | `run_20260830_231749_a6d845` | `run_20260830_232702_a210eb` | مسجل وموثق في JSON |
+| **حجم البيانات** | **1,000,000 سجل** (418.55 MB) | **1,000,000 سجل** (418.55 MB) | نفس الملف تماماً |
+| **عدد أجزاء البيانات (Partitions)** | 12 Partitions | 12 Partitions | موزعة عبر خيوط المعالجة |
+| **زمن تحميل Spark المتوازي** | 43.11 ثانية (23,193.8 سجل/ث) | **41.64 ثانية (24,016.1 سجل/ث)** | أسرع بنسبة ~3.5% |
+| **زمن خط البيانات الكلي (ELT)** | 275.06 ثانية (~4.58 دقيقة) | **207.61 ثانية (~3.46 دقيقة)** | **أسرع بـ 67.45 ثانية (تحسن 24.5%)** |
+| **معدل التدفق الإجمالي (Throughput)** | 3,635.5 سجل/ثانية | **4,816.7 سجل/ثانية** | **زيادة في الإنتاجية (+32.5%)** |
+| **تحقق معادلة الاتساق** | $1000000 = 7192 + 921717 + 71091$ | $1000000 = 7194 + 921717 + 71089$ | **100% مطابقة تامة** |
+| **حماية الـ Idempotency** | إدخال وتحديث | تحديث دون تكرار (`Inserts: 4, Updates: 928907`) | **صفر تكرار تجاري** |
 
-| جانب المقارنة | Python Batch | PySpark |
-|---|---|---|
-| القرار | مناسب للملفات تحت threshold | مناسب للملفات الأكبر أو عند فرض المحرك |
-| قراءة CSV | `csv.DictReader` Streaming | DataFrame مع Fixed String Schema |
-| الذاكرة | Raw/Valid/Quarantine بحجم batch فقط | المعالجة عبر partitions و`mapPartitions` |
-| الكتابة | `insert_many` للـRaw وUpsert للمخرجات | MongoDB Spark Connector بكتابة partitioned وupsert/replace |
-| إعداد التشغيل المثبت | `batch_size=2` في الاختبار | `local[2]`, `partitions=2` |
-| زمن العينة | نحو 0.017 ثانية في تشغيل Mongo Python | نحو 19.3 ثانية في تشغيل Spark/Mongo؛ يتضمن بدء Spark |
-| النتيجة التجارية | 3 Validated و4 Quarantine | 3 Validated و4 Quarantine |
+> **الاستنتاج الهندسي:**  
+> يُظهر الاختبار أن تشغيل Spark في وضع العنقود المستقل (Standalone Cluster Mode) يحقق كفاءة أعلى بفضل عزل عمليات الـ Executor وتوزيع إدارة الذاكرة وخيوط التنفيذ، مما رفع معدل المعالجة الإجمالي إلى أكثر من **4,816 سجل/ثانية** على حجم بيانات يبلغ مليون سجل.
 
-زمن PySpark أعلى على العينة الصغيرة بسبب كلفة بدء Spark؛ وهذا هو سبب استخدام Router لمسار Python عندما يكون الملف دون threshold. المقارنة ليست benchmark لمليون سجل أو Cluster، لأن ذلك يتطلب بيانات/عقدًا منفصلة ولم يُدّعَ هنا.
-
-## الاختبارات
-
-```text
-PYTHONPATH=src python3 -m pytest -q       -> 15 passed
-ruff check src tests scripts              -> All checks passed
-ruff format --check src tests scripts      -> All files formatted
-python3 -m compileall -q src tests scripts -> passed
-```
-
-تغطي الاختبارات قواعد التنظيف وAudit Trail، تصنيف Quarantine، الاتساق، Idempotency، Router threshold، bounded batch behavior، الفهارس وQuarantine upsert، ومسار Incremental B. كما تم تشغيل Python وPySpark على MongoDB Server الحقيقي خارج اختبارات mongomock.
-
-## مسار B الاختياري
-
-ينفذ `src/incremental_loader.py` آلية `version` مع Initial Load ثم Delta تحتوي Insert وUpdate ثم Replay وStale version. أثبت `tests/test_incremental.py` أن Replay لا يكرر الأثر وأن الإصدار الأقدم لا يكتب فوق الإصدار الأحدث. مسار A، أي Spark Standalone على جهازين ومعالجة مليون سجل، غير مدعى لأن البيئة الحالية لا توفر جهازين منفصلين.
-
-## القيود المعروفة
-
-لم يتم تشغيل Docker/Compose لأن Docker daemon غير متوفر في بيئة التنفيذ؛ ملفات `Dockerfile` و`docker-compose.yml` موجودة للتشغيل على جهاز الدكتور. لم تُنشأ لقطات Compass أو Spark UI وهمية؛ يمكن التقاطها عند تشغيل MongoDB وSpark محليًا أو على Cluster. كما أن `local[2]` ليس Spark Cluster مستقلًا، لذلك لا يمثل Path A.
-
-## References
-
-[1]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write-config/ MongoDB, “Batch Write Configuration Options — Spark Connector.”
-
-[2]: https://www.mongodb.com/docs/spark-connector/current/batch-mode/batch-write/ MongoDB, “Write to MongoDB in Batch Mode — Spark Connector.”

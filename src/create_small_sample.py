@@ -1,43 +1,53 @@
-"""Create a reproducible CSV sample without loading the source into memory."""
-
-from __future__ import annotations
-
 import argparse
 import csv
-from pathlib import Path
+import os
+import sys
 
-
-def create_sample(input_path: Path, output_path: Path, rows: int) -> int:
-    if rows <= 0:
-        raise ValueError("rows must be positive")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with input_path.open("r", encoding="utf-8-sig", newline="") as source:
-        reader = csv.reader(source)
-        with output_path.open("w", encoding="utf-8", newline="") as target:
-            writer = csv.writer(target)
+def create_sample(input_path, output_path, target_rows):
+    """Creates a sample CSV file by streaming from the input file."""
+    if not os.path.exists(input_path):
+        print(f"Error: Input file '{input_path}' does not exist.")
+        sys.exit(1)
+        
+    print(f"Reading from {input_path} and writing {target_rows} rows to {output_path}...")
+    
+    try:
+        with open(input_path, 'r', encoding='utf-8-sig', errors='replace') as infile:
+            reader = csv.reader(infile)
+            
+            # Read header
             try:
-                writer.writerow(next(reader))
+                header = next(reader)
             except StopIteration:
-                return 0
-            written = 0
-            for row in reader:
-                if written >= rows:
-                    break
-                writer.writerow(row)
-                written += 1
-    return written
+                print("Error: Input file is empty.")
+                sys.exit(1)
+                
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            with open(output_path, 'w', encoding='utf-8', newline='') as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(header)
+                
+                count = 0
+                for row in reader:
+                    writer.writerow(row)
+                    count += 1
+                    if count >= target_rows:
+                        break
+                        
+        print(f"Success: Sample created with {count} rows at '{output_path}'.")
+    except Exception as e:
+        print(f"Error during sampling: {e}")
+        sys.exit(1)
 
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--rows", type=int, required=True)
+def main():
+    parser = argparse.ArgumentParser(description="Create a small reproducible CSV sample from a large CSV file.")
+    parser.add_argument("--input", default="data/orders_huge_mixed_quality.csv", help="Path to large input CSV file")
+    parser.add_argument("--output", default="data/sample_orders.csv", help="Path to save the small sample CSV file")
+    parser.add_argument("--rows", type=int, default=10000, help="Number of rows to sample (default: 10000)")
+    
     args = parser.parse_args()
-    count = create_sample(args.input, args.output, args.rows)
-    print(f"sample_rows={count} output={args.output}")
-    return 0
-
+    create_sample(args.input, args.output, args.rows)
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

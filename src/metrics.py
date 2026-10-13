@@ -1,52 +1,56 @@
-"""Metrics models and JSON reporting."""
-
-from __future__ import annotations
-
 import json
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any
+import os
+from typing import Dict, Any
+from config import settings
 
-
-@dataclass
-class RunMetrics:
-    run_id: str
-    file_name: str
-    file_size_mb: float
-    engine_used: str
-    rows_read: int = 0
-    raw_loaded: int = 0
-    valid_count: int = 0
-    corrected_count: int = 0
-    quarantine_count: int = 0
-    elapsed_seconds: float = 0.0
-    throughput: float = 0.0
-    batch_size: int | None = None
-    partitions: int | None = None
-    error_case_counts: dict[str, int] = field(default_factory=dict)
-    inserted_count: int = 0
-    updated_count: int = 0
-    unchanged_count: int = 0
-    batches: int = 0
-    batch_timings: list[dict[str, Any]] = field(default_factory=list)
-    notes: list[str] = field(default_factory=list)
-
-    def finalize(self, elapsed: float) -> None:
-        self.elapsed_seconds = round(elapsed, 6)
-        self.throughput = round(self.rows_read / elapsed, 3) if elapsed else 0.0
-
-
-def write_results(metrics: RunMetrics, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = asdict(metrics)
-    payload["consistency_check"] = (
-        metrics.raw_loaded
-        == metrics.valid_count + metrics.corrected_count + metrics.quarantine_count
-    )
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
-def read_results(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+def save_run_metrics(metrics: Dict[str, Any]) -> str:
+    """
+    Saves execution metrics to reports/results.json.
+    Validates the consistency equation: raw_loaded == valid + corrected + quarantine.
+    """
+    reports_file = settings.REPORTS_DIR / "results.json"
+    
+    # 1. Consistency Verification (Section 6.11)
+    raw_loaded = metrics.get("raw_loaded", 0)
+    valid_count = metrics.get("valid_count", 0)
+    corrected_count = metrics.get("corrected_count", 0)
+    quarantine_count = metrics.get("quarantine_count", 0)
+    
+    computed_sum = valid_count + corrected_count + quarantine_count
+    
+    print("-" * 50)
+    print("Consistency Checking (Rule 6.11):")
+    print(f"  Raw loaded count: {raw_loaded}")
+    print(f"  Valid ({valid_count}) + Corrected ({corrected_count}) + Quarantine ({quarantine_count}) = {computed_sum}")
+    
+    if raw_loaded == computed_sum:
+        print("  [SUCCESS] Consistency Equation holds: raw_loaded == valid + corrected + quarantine.")
+        metrics["consistency_valid"] = True
+    else:
+        print("  [WARNING] Consistency Equation MISMATCH! Some records may have been lost or duplicated.")
+        metrics["consistency_valid"] = False
+        
+    # 2. Append metrics to the JSON file
+    existing_runs = []
+    if os.path.exists(reports_file):
+        try:
+            with open(reports_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content:
+                    existing_runs = json.loads(content)
+                    if not isinstance(existing_runs, list):
+                        existing_runs = [existing_runs]
+        except Exception as e:
+            print(f"  Could not read existing reports file: {e}. Resetting file.")
+            
+    existing_runs.append(metrics)
+    
+    try:
+        with open(reports_file, 'w', encoding='utf-8') as f:
+            json.dump(existing_runs, f, indent=2, ensure_ascii=False)
+        print(f"Metrics saved successfully to '{reports_file}'.")
+    except Exception as e:
+        print(f"  [ERROR] Failed to save metrics file: {e}")
+        
+    print("-" * 50)
+    return str(reports_file)

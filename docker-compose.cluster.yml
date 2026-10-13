@@ -1,0 +1,86 @@
+services:
+  # ==========================================
+  # MongoDB Service (Shared Data Store)
+  # ==========================================
+  mongodb:
+    image: mongo:7.0
+    container_name: midterm_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - spark_cluster_net
+
+  # ==========================================
+  # Spark Master Node (Node 1 / Container 1)
+  # ==========================================
+  spark-master:
+    image: apache/spark:3.5.0-python3
+    container_name: spark_master_node
+    restart: unless-stopped
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+    ports:
+      - "7077:7077"   # Spark Master RPC Port
+      - "8080:8080"   # Spark Master Web UI
+    volumes:
+      - ./data:/opt/spark/data:ro          # Shared Storage Read-Only
+      - ./reports:/opt/spark/reports       # Shared Reports Directory
+    networks:
+      - spark_cluster_net
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host 0.0.0.0 --port 7077 --webui-port 8080
+
+  # ==========================================
+  # Spark Worker Node 1 (Node 2 / Container 2)
+  # ==========================================
+  spark-worker-1:
+    image: apache/spark:3.5.0-python3
+    container_name: spark_worker_node_1
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=4
+      - SPARK_WORKER_MEMORY=4G
+    ports:
+      - "8081:8081"   # Worker 1 Web UI
+    volumes:
+      - ./data:/opt/spark/data:ro          # Shared Storage Mount
+      - ./reports:/opt/spark/reports
+    networks:
+      - spark_cluster_net
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8081
+
+  # ==========================================
+  # Spark Worker Node 2 (Node 3 / Container 3)
+  # ==========================================
+  spark-worker-2:
+    image: apache/spark:3.5.0-python3
+    container_name: spark_worker_node_2
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=4
+      - SPARK_WORKER_MEMORY=4G
+    ports:
+      - "8082:8081"   # Worker 2 Web UI mapped to 8082
+    volumes:
+      - ./data:/opt/spark/data:ro          # Shared Storage Mount
+      - ./reports:/opt/spark/reports
+    networks:
+      - spark_cluster_net
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8081
+
+networks:
+  spark_cluster_net:
+    driver: bridge
+
+volumes:
+  mongo_data:
