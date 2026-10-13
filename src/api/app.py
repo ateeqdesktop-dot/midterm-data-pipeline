@@ -1,4 +1,12 @@
+import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
+
+# Ensure project root is in sys.path for seamless imports
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,7 +66,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# Include Routers
+# Include Routers directly (e.g. /health, /queries, /indexes)
 app.include_router(health_router)
 app.include_router(ingest_router)
 app.include_router(indexes_router)
@@ -66,6 +74,15 @@ app.include_router(queries_router)
 app.include_router(aggregations_router)
 app.include_router(mv_router)
 app.include_router(jobs_router)
+
+# Also mount under /api prefix for API clients expecting /api/... (e.g. /api/health)
+app.include_router(health_router, prefix="/api")
+app.include_router(ingest_router, prefix="/api")
+app.include_router(indexes_router, prefix="/api")
+app.include_router(queries_router, prefix="/api")
+app.include_router(aggregations_router, prefix="/api")
+app.include_router(mv_router, prefix="/api")
+app.include_router(jobs_router, prefix="/api")
 
 @app.get("/", tags=["System"])
 def root():

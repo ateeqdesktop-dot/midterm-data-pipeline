@@ -138,30 +138,91 @@ API_PORT=8000
 
 ## 6. تشغيل خط بيانات المرحلة الأولى (Running ELT Pipeline)
 
-خط البيانات النصفي لم يتغير ومحافظ عليه بنسبة 100%:
+## 6. تشغيل خط بيانات المرحلة الأولى (Running ELT Pipeline)
 
+خط البيانات الهجين يدعم التشغيل من المجلد الرئيسي للمشروع أو من داخل مجلد `src` مباشرة بكل مرونة:
+
+### أ) إنشاء العينة الصغيرة للاختبار (Sample Creation - Section 6.1)
+```bash
+python create_small_sample.py --input data/orders_huge_mixed_quality.csv --rows 100000
+```
+
+### ب) فحص وتوجيه المحرك التلقائي (File Router - Section 6.2)
+```bash
+python file_router.py data/sample_orders.csv
+```
+
+### ج) تشغيل خط البيانات الرئيسي (Pipeline Execution)
+- **تشغيل عينة صغيرة من الجذر (Python Batch Streaming)**:
+  ```bash
+  python main.py --input data/sample_orders.csv
+  ```
+- **أو من داخل src**:
+  ```bash
+  python src/main.py --input data/sample_orders.csv
+  ```
 - **تشغيل مجلد البيانات بالكامل**:
   ```bash
-  ./venv/bin/python src/main.py --input data/
+  python main.py --input data/
   ```
-- **تشغيل عينة صغيرة (Python Batch Streaming)**:
+- **تشغيل المسار التزايدي المتقدم مع معالجة الإصدارات (Incremental Path B)**:
   ```bash
-  ./venv/bin/python src/main.py --input data/sample_orders.csv
+  python main.py --input data/sample_orders.csv --incremental
   ```
-- **تشغيل الوضع التزايدي (Incremental Path B with Version Handling)**:
-  ```bash
-  ./venv/bin/python src/main.py --input data/sample_orders.csv --incremental
+
+### د) ضمان خاصية الإعادة الآمنة وعدم التكرار (Idempotency & Upsert - Section 6.10)
+عند إعادة تشغيل نفس الملف المدخل على خط البيانات:
+- لا تتكرر أي سجلات في `orders_validated` لوجود Unique Index على `order_id`.
+- تظل السجلات غير المتغيرة بحالتها الأصلية مع احتساب الإحصائيات بدقة:
   ```
+  DB updates: Inserts=0, Updates=0, Unchanged=9335
+  ```
+
+### هـ) رموز العزل التسعة المعتمدة (Quarantine Error Codes - Section 6.8)
+تُعزل كافة السجلات غير القابلة للتصحيح الآمن في مجموعة `orders_quarantine` وفق الرموز التسعة المحددة في وثيقة التكليف:
+1. `MISSING_ORDER_ID`: معرف الطلب مفقود أو فارغ ولا يمكن استنتاجه.
+2. `MISSING_CUSTOMER_ID`: معرف العميل مفقود أو فارغ.
+3. `INVALID_IMPOSSIBLE_DATE`: تاريخ غير منطقي أو خارج النطاق المنطقي.
+4. `CORRUPTED_ITEMS_JSON`: حقل العناصر تالف أو غير قابل للتحليل كـ JSON.
+5. `EMPTY_ITEMS`: قائمة عناصر الطلب فارغة تماماً.
+6. `UNKNOWN_PRICE`: السعر الأصلي مفقود ولا يمكن حسابه.
+7. `AMBIGUOUS_NEGATIVE_VALUE`: مبالغ أو كميات سالبة لا يمكن تحديد معناها.
+8. `DUPLICATE_ORDER_ID`: تكرار في معرف الطلب ضمن نفس الدفعة.
+9. `MULTIPLE_CONFLICTING_ERRORS`: اجتماع خطأين جوهريين أو أكثر في نفس السجل.
 
 ---
 
 ## 7. تشغيل واجهة التطبيقات الموحدة (Running FastAPI Server)
 
-لتشغيل خادم API الموحد:
+يمكن تشغيل خادم FastAPI الموحد بأي من الطرق المعيارية التالية، ويستمع الخادم افتراضياً على `http://0.0.0.0:8000`:
+
+### الطريقة 1: عبر سكربت التشغيل الجاهز (موصى بها)
 ```bash
-./venv/bin/python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+python run_api.py
 ```
-عند بدء التشغيل، يقوم الخادم تلقائياً بتهيئة المجدول الخلفي للمهام (`APScheduler`) ليعمل بالتوازي وبصورة آمنة.
+
+### الطريقة 2: عبر Uvicorn مباشرة من جذر المستودع
+```bash
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### الطريقة 3: عبر Uvicorn من مسار الحزمة
+```bash
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### الطريقة 4: عبر بايثون مباشرة
+```bash
+python src/api/app.py
+```
+
+> **ملاحظة تشغيلية**: الخادم يدعم كافة المسارات بصيغتيها (مباشرة وببادئة `/api`):
+> - الفحص الصحي: `GET /health` أو `GET /api/health`
+> - الاستعلامات: `GET /queries` أو `GET /api/queries`
+> - التجميعات: `GET /aggregations` أو `GET /api/aggregations`
+> - الفهارس: `GET /indexes` أو `GET /api/indexes`
+> - التحديث التزايدي: `POST /refresh-mv` أو `POST /api/refresh-mv`
+> - المهام المجدولة: `GET /jobs` أو `GET /api/jobs`
 
 ---
 

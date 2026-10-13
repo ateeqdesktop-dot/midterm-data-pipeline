@@ -78,7 +78,6 @@ def write_incremental_records_bulk(records: List[Dict[str, Any]]) -> Tuple[int, 
                 match_query = {"order_id": order_id}
                 update_doc = {
                     "$set": {
-                        "run_id": rec.get("run_id"),
                         "order_date": rec.get("order_date"),
                         "status": rec.get("status"),
                         "customer_id": rec.get("customer_id"),
@@ -100,18 +99,17 @@ def write_incremental_records_bulk(records: List[Dict[str, Any]]) -> Tuple[int, 
                     }
                 }
                 operations.append(UpdateOne(match_query, update_doc, upsert=False))
-                updated_count += 1
         else:
             # Document does not exist. We do an insert (upsert=True)
             match_query = {"order_id": order_id}
             update_doc = {
                 "$setOnInsert": {
+                    "run_id": rec.get("run_id"),
                     "ingested_at": rec.get("ingested_at"),
                     "engine_used": rec.get("engine_used"),
                     "source_file": rec.get("source_file"),
                 },
                 "$set": {
-                    "run_id": rec.get("run_id"),
                     "order_date": rec.get("order_date"),
                     "status": rec.get("status"),
                     "customer_id": rec.get("customer_id"),
@@ -138,40 +136,16 @@ def write_incremental_records_bulk(records: List[Dict[str, Any]]) -> Tuple[int, 
     if operations:
         try:
             result = collection.bulk_write(operations, ordered=False)
-            # result.upserted_count tells us how many actually got inserted
             inserted_count = result.upserted_count
-            
-            # Since some operations were updates (upsert=False), PyMongo registers them in modified_count.
-            # However, if data is identical, modified_count is 0.
-            # We already incremented updated_count locally.
-            # Let's adjust updated_count based on what was actually modified, and add to unchanged.
-            actual_modified = result.modified_count
-            matched_updates = result.matched_count
-            
-            # The remaining matches that were not modified are unchanged
-            actual_unchanged = max(0, matched_updates - actual_modified)
+            updated_count = result.modified_count
+            actual_unchanged = max(0, result.matched_count - result.modified_count)
             unchanged_count += actual_unchanged
-            
-            # Update updated_count to reflect actual modified updates
-            # (if an update matched but didn't modify anything, it's unchanged)
-            # Actually, it's simpler:
-            # Let's trust MongoDB statistics:
-            # result.upserted_count is inserts.
-            # result.modified_count is modified updates.
-            # matched - modified is unchanged updates.
-            # So:
-            inserted_count = result.upserted_count
-            # For records where we ran update:
-            # if they matched and changed: updated
-            # if they matched and didn't change: unchanged
-            # We can calculate:
-            # result.modified_count = modified records
-            # unchanged_count += (result.matched_count - result.modified_count)
-            # Wait, matched_count covers BOTH updates and upserts that matched.
-            # This is 100% correct.
-            
         except pymongo.errors.BulkWriteError as bwe:
             print(f"  [ERROR] Bulk Write Error during incremental load: {bwe.details}")
+            inserted_count = bwe.details.get("nUpserted", 0)
+            updated_count = bwe.details.get("nModified", 0)
+            matched = bwe.details.get("nMatched", 0)
+            unchanged_count += max(0, matched - updated_count)
             
     client.close()
     return inserted_count, updated_count, unchanged_count

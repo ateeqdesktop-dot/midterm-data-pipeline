@@ -28,15 +28,15 @@ def write_validated_records_bulk(records: List[Dict[str, Any]]) -> Tuple[int, in
         match_query = {"order_id": str(order_id).strip()}
         
         # We separate system ingestion fields ($setOnInsert) from normal data ($set)
-        # to preserve original ingested time.
+        # to preserve original ingested time and prevent re-runs from triggering false updates.
         update_doc = {
             "$setOnInsert": {
+                "run_id": rec.get("run_id"),
                 "ingested_at": rec.get("ingested_at"),
                 "engine_used": rec.get("engine_used"),
                 "source_file": rec.get("source_file"),
             },
             "$set": {
-                "run_id": rec.get("run_id"),
                 "order_date": rec.get("order_date"),
                 "status": rec.get("status"),
                 "customer_id": rec.get("customer_id"),

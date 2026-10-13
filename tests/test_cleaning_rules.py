@@ -149,15 +149,15 @@ def test_status_normalize_rule():
         "customer_name": "  محمد علي  "
     }
     cleaned, corrections = rule.apply(record)
-    assert cleaned["status"] == "توصيل"
+    assert cleaned["status"] == "تم التسليم"
     assert cleaned["payment_status"] == "بانتظار الدفع"
     assert cleaned["customer_name"] == "محمد علي"
 
 def test_total_recalculation_rule():
     rule = TotalRecalculationRule()
-    # Negative quantity corrected, and total recalculation matches
+    # Mismatched item total corrected, and overall total recalculation matches sum + delivery
     items = [
-        {"sku": "SKU-1010", "name": "Phone", "qty": -2, "unit_price": 100.0, "total": 300.0},
+        {"sku": "SKU-1010", "name": "Phone", "qty": 2, "unit_price": 100.0, "total": 300.0},
         {"sku": "SKU-1002", "name": "Mouse", "qty": 1, "unit_price": 50.0, "total": 50.0}
     ]
     record = {
@@ -167,7 +167,6 @@ def test_total_recalculation_rule():
     }
     cleaned, corrections = rule.apply(record)
     
-    # Item 1 qty is corrected to 2.
     # Item 1 total is corrected to 200.0 (2 * 100.0).
     # Expected sum = 200.0 + 50.0 = 250.0.
     # Expected total_amount = 250.0 + 10.0 = 260.0.

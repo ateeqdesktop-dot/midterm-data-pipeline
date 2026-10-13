@@ -3,6 +3,13 @@ import os
 import sys
 import uuid
 from datetime import datetime
+from pathlib import Path
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from config import settings
 from src.file_router import route_file
 from src.elt_pipeline import run_elt_pipeline

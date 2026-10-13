@@ -270,7 +270,6 @@ def spark_upsert_to_validated(records: List[Dict[str, Any]], use_version_protect
                 # Incoming is newer or equal — update
                 update_doc = {
                     "$set": {
-                        "run_id": rec.get("run_id"),
                         "order_date": rec.get("order_date"),
                         "status": rec.get("status"),
                         "customer_id": rec.get("customer_id"),
@@ -296,12 +295,12 @@ def spark_upsert_to_validated(records: List[Dict[str, Any]], use_version_protect
                 # New record — insert via upsert
                 update_doc = {
                     "$setOnInsert": {
+                        "run_id": rec.get("run_id"),
                         "ingested_at": rec.get("ingested_at"),
                         "engine_used": rec.get("engine_used"),
                         "source_file": rec.get("source_file"),
                     },
                     "$set": {
-                        "run_id": rec.get("run_id"),
                         "order_date": rec.get("order_date"),
                         "status": rec.get("status"),
                         "customer_id": rec.get("customer_id"),
@@ -352,12 +351,12 @@ def spark_upsert_to_validated(records: List[Dict[str, Any]], use_version_protect
             # Separate system ingestion fields ($setOnInsert) from data fields ($set)
             update_doc = {
                 "$setOnInsert": {
+                    "run_id": rec.get("run_id"),
                     "ingested_at": rec.get("ingested_at"),
                     "engine_used": rec.get("engine_used"),
                     "source_file": rec.get("source_file"),
                 },
                 "$set": {
-                    "run_id": rec.get("run_id"),
                     "order_date": rec.get("order_date"),
                     "status": rec.get("status"),
                     "customer_id": rec.get("customer_id"),
