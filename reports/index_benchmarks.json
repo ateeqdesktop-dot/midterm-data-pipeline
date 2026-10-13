@@ -59,7 +59,7 @@
       "winningPlanStage": "COLLSCAN"
     },
     "after": {
-      "executionTimeMillis": 0,
+      "executionTimeMillis": 1,
       "totalDocsExamined": 100,
       "totalKeysExamined": 100,
       "nReturned": 100,

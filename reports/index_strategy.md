@@ -47,7 +47,7 @@
 | المقياس (Metric) | قبل الفهرس (Before) | بعد الفهرس (After) | التحسن (Improvement) |
 |---|---|---|---|
 | نوع المسح (Scan Type) | **COLLSCAN** (COLLSCAN) | **IXSCAN** (IXSCAN) | انتقال جذري إلى مسح الفهرس |
-| زمن التنفيذ (executionTimeMillis) | `15 ms` | `0 ms` | وفر `15 ms` |
+| زمن التنفيذ (executionTimeMillis) | `15 ms` | `1 ms` | وفر `14 ms` |
 | المستندات المفحوصة (totalDocsExamined) | `2,260` | `100` | انخفاض بنسبة `95.58%` |
 | مفاتيح الفهرس المفحوصة (totalKeysExamined) | `0` | `100` | استهداف مباشر للمفاتيح |
 | السجلات المسترجعة (nReturned) | `100` | `100` | استرجاع مطابق بدقة تامة |
